@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Advents Adventure</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Courier New', monospace; }
+        body { background: #0f172a; color: #f8fafc; overflow: hidden; touch-action: none; }
+        #app { width: 100vw; height: 100vh; display: flex; flex-direction: column; position: relative; }
+        
+        #login-screen {
+            position: absolute; inset: 0; background: rgba(15, 23, 42, 0.98); z-index: 100;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center;
+        }
+        .card { background: #1e293b; border: 3px solid #38bdf8; border-radius: 12px; padding: 25px; max-width: 400px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        input, select { width: 100%; padding: 10px; margin: 10px 0; background: #0f172a; border: 2px solid #64748b; color: white; border-radius: 6px; font-size: 16px; }
+        button { background: #10b981; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; width: 100%; margin-top: 10px; transition: 0.2s; }
+        button:hover { background: #059669; }
+
+        #hud {
+            height: 60px; background: #1e293b; border-bottom: 2px solid #334155;
+            display: none; align-items: center; justify-content: space-between; padding: 0 15px; font-size: 13px; z-index: 10;
+        }
+        .hud-item { display: flex; align-items: center; gap: 5px; }
+        .aura-badge { color: #facc15; font-weight: bold; }
+
+        #canvas-container { flex: 1; position: relative; background: #0b1329; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        canvas { display: block; background: #1e293b; border: 2px solid #38bdf8; border-radius: 8px; }
+
+        #modal-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85); z-index: 50;
+            display: none; align-items: center; justify-content: center; padding: 15px;
+        }
+        .modal-content {
+            background: #1e293b; border: 3px solid #f43f5e; border-radius: 12px;
+            width: 100%; max-width: 500px; max-height: 85vh; overflow-y: auto; padding: 20px; position: relative;
+        }
+        .close-btn { position: absolute; top: 10px; right: 15px; background: #ef4444; border: none; color: white; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer; }
+        
+        /* Touch Controller für Handy */
+        #touch-controls {
+            position: absolute; bottom: 15px; width: 100%; display: flex; justify-content: space-around; padding: 0 20px; z-index: 5;
+        }
+        .ctrl-btn { background: rgba(56, 189, 248, 0.3); border: 2px solid #38bdf8; color: white; width: 60px; height: 60px; border-radius: 50%; font-size: 20px; display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Startbildschirm -->
+        <div id="login-screen">
+            <div class="card">
+                <h2>❄️ Advents Adventure ❄️</h2>
+                <p style="margin: 10px 0; font-size: 13px; color: #94a3b8;">Erstelle deinen Charakter & betretet die Winterwelt!</p>
+                <input type="text" id="player-name" placeholder="Dein Name..." value="Hasi">
+                <select id="player-role">
+                    <option value="player">Spielerin (Abenteuer spielen)</option>
+                    <option value="admin">Helfer / Admin (Zuschauen & Helfen)</option>
+                </select>
+                <label style="text-align: left; font-size: 12px; color: #94a3b8;">Pullover-Farbe:</label>
+                <input type="color" id="player-color" value="#f43f5e" style="height: 40px; padding: 0;">
+                <button onclick="startGame()">Abenteuer starten 🎄</button>
+            </div>
+        </div>
+
+        <!-- HUD -->
+        <div id="hud">
+            <div class="hud-item">👤 <span id="hud-name">Hasi</span></div>
+            <div class="hud-item">✨ <span id="hud-aura" class="aura-badge">0</span></div>
+            <div class="hud-item">⏳ <span id="hud-timer">12:00</span></div>
+            <button onclick="openQuestMenu()" style="padding: 6px 10px; font-size: 12px; width: auto; margin:0; background:#3b82f6;">📅 Kalender</button>
+        </div>
+
+        <!-- 2D Welt -->
+        <div id="canvas-container">
+            <canvas id="gameCanvas" width="320" height="240"></canvas>
+            <p style="margin-top: 10px; font-size: 12px; color: #94a3b8;">Tippe auf „📅 Kalender“, um die Aufgaben zu öffnen!</p>
+        </div>
+
+        <!-- Handy Touch-Steuerung -->
+        <div id="touch-controls">
+            <div class="ctrl-btn" ontouchstart="movePlayer(-15, 0)" onclick="movePlayer(-15, 0)">⬅️</div>
+            <div class="ctrl-btn" ontouchstart="movePlayer(0, -15)" onclick="movePlayer(0, -15)">⬆️</div>
+            <div class="ctrl-btn" ontouchstart="movePlayer(0, 15)" onclick="movePlayer(0, 15)">⬇️</div>
+            <div class="ctrl-btn" ontouchstart="movePlayer(15, 0)" onclick="movePlayer(15, 0)">➡️</div>
+        </div>
+
+        <!-- Modals für Quests & Minispiele -->
+        <div id="modal-overlay">
+            <div class="modal-content">
+                <button class="close-btn" onclick="closeModal()">×</button>
+                <div id="modal-body"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let gameState = { name: "Hasi", role: "player", color: "#f43f5e", aura: 0, x: 140, y: 100 };
+        let canvas, ctx;
+
+        const questsData = {
+            1: { title: "Tag 1: Kopfkissen-Jagd", desc: "5 Level Fliegen klatschen. Nachttisch-Uhr wechselt von 00:00 zu 05:00 Uhr, danach schlafen bis 08:00 Uhr." },
+            2: { title: "Tag 2: Winter-Flappy Bird", warning: "Nach 45 Minuten fliegt der Vogel automatisch durch!", desc: "Erreiche Score 15 oder warte die Zeit ab." },
+            6: { title: "Tag 6: Apothecary Diaries Quiz", desc: "20 spannende Fragen rund um Maomao und Jinshi." },
+            10: { title: "Tag 10: Joker-Aufgabe", type: "joker", text: "Geh nach draußen etwas Gras oder Schnee anfassen! ❄️" },
+            22: { title: "Tag 22: Joker-Aufgabe", type: "joker", text: "Geh nach draußen etwas Gras oder Schnee anfassen! ❄️" },
+            24: { title: "Tag 24: Persönliches Quiz", type: "personal_quiz" }
+        };
+
+        function startGame() {
+            gameState.name = document.getElementById('player-name').value || "Hasi";
+            gameState.role = document.getElementById('player-role').value;
+            gameState.color = document.getElementById('player-color').value;
+
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('hud').style.display = 'flex';
+            document.getElementById('hud-name').innerText = gameState.name;
+
+            initCanvas();
+        }
+
+        function initCanvas() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            drawWorld();
+        }
+
+        function movePlayer(dx, dy) {
+            gameState.x = Math.max(10, Math.min(280, gameState.x + dx));
+            gameState.y = Math.max(10, Math.min(190, gameState.y + dy));
+            drawWorld();
+        }
+
+        function drawWorld() {
+            if (!ctx) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Hütte / Zimmer Hintergrund
+            ctx.fillStyle = "#334155";
+            ctx.fillRect(40, 30, 240, 160);
+
+            // Spieler Figur
+            ctx.fillStyle = gameState.color;
+            ctx.fillRect(gameState.x, gameState.y, 20, 24);
+
+            // Gesicht / Name
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "10px Courier New";
+            ctx.fillText(gameState.name, gameState.x - 5, gameState.y - 5);
+        }
+
+        function openQuestMenu() {
+            let html = `<h3>🎄 Adventskalender Aufgaben</h3><p style="font-size:12px; color:#94a3b8; margin-bottom:10px;">Wähle eine Aufgabe aus:</p><div style="display:flex; flex-direction:column; gap:8px;">`;
+            
+            for (let day in questsData) {
+                html += `<button onclick="startQuest(${day})" style="background:#334155; text-align:left; padding:10px; font-size:14px;">Türchen ${day}: ${questsData[day].title}</button>`;
+            }
+            html += `</div>`;
+            openModal(html);
+        }
+
+        function startQuest(day) {
+            const q = questsData[day];
+            if (q.warning) alert("⚠️ WARNUNG: " + q.warning);
+
+            if (q.type === 'joker') {
+                alert(q.text);
+                gameState.aura += 1;
+                document.getElementById('hud-aura').innerText = gameState.aura;
+                closeModal();
+            } else if (q.type === 'personal_quiz') {
+                renderPersonalQuiz();
+            } else {
+                openModal(`<h3>${q.title}</h3><p style="margin:10px 0;">${q.desc}</p><button onclick="completeTask(true)">Aufgabe geschafft (+1 Aura)</button><button onclick="completeTask(false)" style="background:#ef4444; margin-top:5px;">Nicht geschafft (-1 Aura)</button>`);
+            }
+        }
+
+        function renderPersonalQuiz() {
+            let html = `
+                <h3>🎄 Tag 24: Persönliches Quiz 🎄</h3>
+                <p style="font-size:12px; margin-top:5px;">1. Geburtstag:</p><input type="text" id="q1" placeholder="TT.MM.JJJJ">
+                <p style="font-size:12px;">2. Lieblingsfach damals:</p><select id="q2"><option value="deutsch">Deutsch</option><option value="kunst">Kunst</option></select>
+                <p style="font-size:12px;">3. Lehrer, bei dem wir zustimmen:</p><select id="q3"><option value="arend">Arend</option><option value="brueggemann">Brüggemann</option></select>
+                <p style="font-size:12px;">4. Bin ich adoptiert?:</p><select id="q4"><option value="ja">Ja</option><option value="nein">Nein</option></select>
+                <button onclick="checkPersonalQuiz()">Antworten absenden</button>
+                <div id="quiz-feedback" style="margin-top: 10px; font-weight: bold; text-align: center; font-size: 20px;"></div>
+            `;
+            openModal(html);
+        }
+
+        function checkPersonalQuiz() {
+            const d = document.getElementById('q1').value;
+            const f = document.getElementById('q2').value;
+            const l = document.getElementById('q3').value;
+            const a = document.getElementById('q4').value;
+
+            const passed = (d === "05.07.2005" && f === "kunst" && l === "brueggemann" && a === "nein");
+
+            if (passed) {
+                document.getElementById('quiz-feedback').innerHTML = "Richtig! 🎉";
+                completeTask(true);
+            } else {
+                document.getElementById('quiz-feedback').innerHTML = "HS";
+                setTimeout(() => {
+                    document.getElementById('modal-body').innerHTML = `
+                        <div style="background:red; width:100%; height:200px; display:flex; align-items:center; justify-content:center; font-size:30px;">
+                            😱 JUMP SCARE! 😱
+                        </div>
+                        <p style="text-align:center; margin-top:10px;">Leider falsch! -Aura.</p>
+                    `;
+                    completeTask(false);
+                }, 2000);
+            }
+        }
+
+        function completeTask(success) {
+            if (success) {
+                gameState.aura += 1;
+                alert("Super! +1 Aura.");
+            } else {
+                gameState.aura -= 1;
+                alert("Schade! -1 Aura. Das Türchen öffnet sich trotzdem.");
+            }
+            document.getElementById('hud-aura').innerText = gameState.aura;
+            closeModal();
+        }
+
+        function openModal(html) {
+            document.getElementById('modal-body').innerHTML = html;
+            document.getElementById('modal-overlay').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
